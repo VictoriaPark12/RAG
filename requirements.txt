@@ -1,0 +1,9 @@
+langchain-core
+langchain-community
+langchain-postgres
+
+sqlalchemy>=2
+
+psycopg[binary]
+pgvector
+

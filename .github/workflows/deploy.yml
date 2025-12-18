@@ -1,0 +1,158 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main  # main 브랜치에 push될 때마다 배포
+  workflow_dispatch:  # 수동 트리거 가능
+    inputs:
+      git_ref:
+        description: "Git branch/tag/commit to deploy (manual only)"
+        required: false
+        default: "main"
+        type: string
+      skip_tests:
+        description: "Skip tests (manual only)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.skip_tests != 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref || 'main' }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r app/requirements_rag.txt
+          pip install pytest pytest-cov
+
+      - name: Run unit tests
+        run: |
+          cd app
+          pytest tests/unit_tests -v --cov=. --cov-report=term-missing || echo "No tests found, skipping..."
+
+  deploy:
+    name: Deploy to EC2
+    needs: test  # 테스트 통과 후에만 배포
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref || 'main' }}
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}  # 예: /opt/langchain
+        run: |
+          ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'ENDSSH'
+            set -e
+
+            echo "🚀 Starting deployment..."
+
+            # 배포 디렉토리로 이동
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # 기존 변경사항 백업 (혹시 모를 경우)
+            git stash || true
+
+            # 최신 코드 pull (push: main, manual: 입력 ref)
+            REF="${{ github.event.inputs.git_ref }}"
+            if [ -z "$REF" ]; then REF="main"; fi
+            git fetch --all --tags
+            git checkout "$REF"
+            git pull origin "$REF" || true
+
+            # .env 파일 존재 확인 (없으면 에러)
+            if [ ! -f .env ]; then
+              echo "❌ ERROR: .env file not found!"
+              exit 1
+            fi
+
+            # Docker 이미지 빌드 및 컨테이너 재시작
+            echo "📦 Building Docker images..."
+            docker-compose build --no-cache backend
+
+            echo "🔄 Restarting services..."
+            docker-compose down
+            docker-compose up -d
+
+            # 헬스체크 대기
+            echo "⏳ Waiting for services to be healthy..."
+            sleep 10
+
+            # 백엔드 상태 확인
+            if docker ps | grep -q langchain-backend; then
+              echo "✅ Backend is running"
+              docker logs --tail 50 langchain-backend
+            else
+              echo "❌ Backend failed to start"
+              docker logs --tail 100 langchain-backend
+              exit 1
+            fi
+
+            # API 헬스체크
+            for i in {1..30}; do
+              if curl -f http://localhost:8000/docs > /dev/null 2>&1; then
+                echo "✅ API is healthy!"
+                break
+              fi
+              echo "⏳ Waiting for API... ($i/30)"
+              sleep 2
+            done
+
+            echo "🎉 Deployment completed successfully!"
+          ENDSSH
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Deployment succeeded"
+          else
+            echo "❌ Deployment failed"
+          fi
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+

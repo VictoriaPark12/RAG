@@ -1,0 +1,25 @@
+langchain-core
+langchain-community
+langchain-postgres
+langchain-huggingface
+langsmith
+
+sqlalchemy>=2
+
+psycopg[binary]
+asyncpg
+pgvector
+
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+
+# Local LLM & Embeddings
+transformers>=4.36.0
+torch
+accelerate
+bitsandbytes  # 4bit 양자화
+safetensors   # 안전한 모델 저장
+sentence-transformers
+

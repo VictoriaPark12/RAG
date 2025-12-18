@@ -1,0 +1,84 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.env
+.env.*
+*.log
+logs/
+temp/
+tmp/
+node_modules/
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Tests
+tests/
+*.test.py
+
+# Model files (빌드 시 포함하지 않고, 런타임에 마운트)
+app/model/*
+!app/model/.gitkeep
+
+# Data files (빌드 시 제외)
+app/data/*.json
+!app/data/.gitkeep
+
+# Frontend (백엔드 이미지에는 불필요)
+front/
+
+# Scripts
+scripts/
+*.sh
+*.ps1
+*.bat
+
+# CI/CD
+.github/workflows/
+docker-compose*.yml
+Dockerfile
+.dockerignore

@@ -55,25 +55,32 @@ ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" << ENDSSH
     exit 1
   fi
 
-  # Docker 빌드
-  echo "🔨 Building Docker images..."
-  docker-compose build --no-cache backend
+  # Python 가상환경 확인 및 의존성 설치
+  if [ ! -d venv ]; then
+    echo "🐍 Creating Python virtual environment..."
+    python3.11 -m venv venv
+  fi
 
-  # 서비스 재시작
-  echo "♻️  Restarting services..."
-  docker-compose down
-  docker-compose up -d
+  echo "📦 Installing/updating dependencies..."
+  source venv/bin/activate
+  pip install --upgrade pip
+  pip install -r app/requirements.txt
+
+  # systemd 서비스 재시작
+  echo "♻️  Restarting langchain-backend service..."
+  sudo systemctl daemon-reload
+  sudo systemctl restart langchain-backend
 
   # 헬스체크
-  echo "⏳ Waiting for services to start..."
+  echo "⏳ Waiting for service to start..."
   sleep 10
 
   # 백엔드 상태 확인
-  if docker ps | grep -q langchain-backend; then
-    echo "✅ Backend is running"
+  if sudo systemctl is-active --quiet langchain-backend; then
+    echo "✅ Backend service is running"
   else
-    echo "❌ Backend failed to start"
-    docker logs --tail 50 langchain-backend
+    echo "❌ Backend service failed to start"
+    sudo journalctl -u langchain-backend --no-pager -n 50
     exit 1
   fi
 
@@ -86,7 +93,7 @@ ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" << ENDSSH
     fi
     if [ \$i -eq 30 ]; then
       echo "❌ API health check failed"
-      docker logs --tail 50 langchain-backend
+      sudo journalctl -u langchain-backend --no-pager -n 50
       exit 1
     fi
     echo "⏳ Waiting for API... (\$i/30)"

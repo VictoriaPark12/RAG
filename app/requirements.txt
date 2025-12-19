@@ -2,6 +2,7 @@ langchain-core
 langchain-community
 langchain-postgres
 langchain-huggingface
+langchain-ollama  # 선택적: Ollama 지원 (LLM_PROVIDER=ollama 사용 시)
 langsmith
 
 sqlalchemy>=2
@@ -22,4 +23,5 @@ accelerate
 bitsandbytes  # 4bit 양자화
 safetensors   # 안전한 모델 저장
 sentence-transformers
+
 

@@ -20,9 +20,7 @@ on:
           - "false"
           - "true"
 
-env:
-  DOCKER_BUILDKIT: 1
-  COMPOSE_DOCKER_CLI_BUILD: 1
+# Docker 없이 직접 배포
 
 jobs:
   test:
@@ -45,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r app/requirements_rag.txt
+          pip install -r app/requirements.txt
           pip install pytest pytest-cov
 
       - name: Run unit tests
@@ -73,10 +71,47 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
+          # 환경 변수 검증
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "❌ ERROR: EC2_SSH_PRIVATE_KEY secret is not set"
+            exit 1
+          fi
+          if [ -z "$EC2_HOST" ]; then
+            echo "❌ ERROR: EC2_HOST secret is not set"
+            exit 1
+          fi
+          if [ -z "$EC2_USER" ]; then
+            echo "❌ ERROR: EC2_USER secret is not set"
+            exit 1
+          fi
+
+          echo "🔧 Configuring SSH..."
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # SSH 키 저장 (개행 문자 보존)
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+
+          # EC2_HOST 값 확인 및 검증
+          echo "🔍 EC2_HOST 값 확인: ${EC2_HOST:0:20}..."  # 처음 20자만 출력 (보안)
+          if [ -z "$EC2_HOST" ]; then
+            echo "❌ ERROR: EC2_HOST 값이 비어있습니다"
+            exit 1
+          fi
+
+          # known_hosts에 호스트 추가
+          echo "🔧 Adding host to known_hosts..."
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>&1 || {
+            echo "⚠️  Warning: ssh-keyscan failed, but continuing..."
+          }
+
+          # SSH 연결 테스트
+          echo "🔍 Testing SSH connection..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$EC2_USER@$EC2_HOST" "echo 'SSH connection successful'" || {
+            echo "❌ ERROR: SSH connection test failed"
+            exit 1
+          }
 
       - name: Deploy to EC2
         env:
@@ -84,13 +119,25 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}  # 예: /opt/langchain
         run: |
-          ssh -i ~/.ssh/deploy_key $EC2_USER@$EC2_HOST << 'ENDSSH'
+          # DEPLOY_PATH 검증
+          if [ -z "$DEPLOY_PATH" ]; then
+            echo "❌ ERROR: DEPLOY_PATH secret is not set"
+            exit 1
+          fi
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" bash -s << ENDSSH
             set -e
 
-            echo "🚀 Starting deployment..."
+            DEPLOY_PATH="$DEPLOY_PATH"
+            echo "🚀 Starting deployment to: \$DEPLOY_PATH"
 
-            # 배포 디렉토리로 이동
-            cd ${{ secrets.DEPLOY_PATH }}
+            # 배포 디렉토리 확인 및 이동
+            if [ ! -d "\$DEPLOY_PATH" ]; then
+              echo "❌ ERROR: Deploy path does not exist: \$DEPLOY_PATH"
+              exit 1
+            fi
+            cd "\$DEPLOY_PATH"
+            echo "📂 Current directory: \$(pwd)"
 
             # 기존 변경사항 백업 (혹시 모를 경우)
             git stash || true
@@ -108,25 +155,34 @@ jobs:
               exit 1
             fi
 
-            # Docker 이미지 빌드 및 컨테이너 재시작
-            echo "📦 Building Docker images..."
-            docker-compose build --no-cache backend
+            # Python 가상환경 확인 및 생성
+            if [ ! -d venv ]; then
+              echo "📦 Creating Python virtual environment..."
+              python3.11 -m venv venv
+            fi
 
-            echo "🔄 Restarting services..."
-            docker-compose down
-            docker-compose up -d
+            # 가상환경 활성화 및 의존성 설치
+            echo "📦 Installing dependencies..."
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r app/requirements.txt
+
+            # systemd 서비스 재시작
+            echo "🔄 Restarting langchain-backend service..."
+            sudo systemctl daemon-reload
+            sudo systemctl restart langchain-backend
 
             # 헬스체크 대기
-            echo "⏳ Waiting for services to be healthy..."
+            echo "⏳ Waiting for service to be healthy..."
             sleep 10
 
             # 백엔드 상태 확인
-            if docker ps | grep -q langchain-backend; then
-              echo "✅ Backend is running"
-              docker logs --tail 50 langchain-backend
+            if sudo systemctl is-active --quiet langchain-backend; then
+              echo "✅ Backend service is running"
+              sudo journalctl -u langchain-backend --no-pager -n 50
             else
-              echo "❌ Backend failed to start"
-              docker logs --tail 100 langchain-backend
+              echo "❌ Backend service failed to start"
+              sudo journalctl -u langchain-backend --no-pager -n 100
               exit 1
             fi
 

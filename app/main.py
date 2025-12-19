@@ -32,10 +32,8 @@ try:
 except (ModuleNotFoundError, ImportError) as e:  # pragma: no cover
     msg = (
         "필수 의존성이 설치되지 않아 `app/main.py`를 시작할 수 없습니다.\n\n"
-        "권장(가장 간단):\n"
-        "  pip install -r app/requirements_rag.txt\n\n"
-        "또는(루트 requirements 사용 시):\n"
-        "  pip install -r requirements_rag.txt\n\n"
+        "의존성 설치:\n"
+        "  pip install -r app/requirements.txt\n\n"
         f"원본 에러: {e}"
     )
     raise RuntimeError(msg) from e

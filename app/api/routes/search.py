@@ -28,7 +28,7 @@ else:
         msg = (
             "필수 의존성이 설치되지 않아 Search API를 로드할 수 없습니다.\n\n"
             "권장:\n"
-            "  pip install -r app/requirements_rag.txt\n\n"
+            "  pip install -r app/requirements.txt\n\n"
             f"원본 에러: {e}"
         )
         raise RuntimeError(msg) from e
@@ -55,7 +55,7 @@ else:
             msg = (
                 "필수 의존성이 설치되지 않아 Search API를 로드할 수 없습니다. (langchain-core 누락)\n\n"
                 "권장(가장 간단):\n"
-                "  pip install -r app/requirements_rag.txt\n\n"
+                "  pip install -r app/requirements.txt\n\n"
                 "또는(로컬 소스 사용):\n"
                 f"  {_LOCAL_CORE}\n\n"
                 f"원본 에러: {e2}"

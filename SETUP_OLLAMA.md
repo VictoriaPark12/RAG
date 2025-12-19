@@ -57,7 +57,7 @@ source venv/bin/activate
 
 ### RAG용 패키지 설치
 ```bash
-pip install -r requirements_rag.txt
+pip install -r app/requirements.txt
 ```
 
 ## 5. PostgreSQL + pgvector 실행 (Docker)

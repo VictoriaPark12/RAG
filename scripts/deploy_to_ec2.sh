@@ -108,16 +108,27 @@ ENVEOF
     echo "❌ Python 3 not found. Installing Python 3..."
     sudo apt update
     sudo apt install -y python3 python3-venv python3-pip
+    # 설치 후 명시적으로 python3 사용
+    PYTHON_CMD=python3
+  fi
+
+  # 변수가 비어있으면 기본값 사용
+  if [ -z "$PYTHON_CMD" ]; then
     PYTHON_CMD=python3
   fi
 
   echo "✅ Using Python: $PYTHON_CMD"
-  $PYTHON_CMD --version || echo "⚠️  Warning: Could not get Python version"
+  $PYTHON_CMD --version 2>&1 || echo "⚠️  Warning: Could not get Python version"
 
   # Python 가상환경 확인 및 생성
   if [ ! -d venv ]; then
     echo "🐍 Creating Python virtual environment..."
-    $PYTHON_CMD -m venv venv
+    # PYTHON_CMD가 비어있으면 python3 직접 사용
+    if [ -n "$PYTHON_CMD" ]; then
+      $PYTHON_CMD -m venv venv
+    else
+      python3 -m venv venv
+    fi
   fi
 
   echo "📦 Installing/updating dependencies..."

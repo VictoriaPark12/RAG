@@ -4,8 +4,8 @@ export async function POST(req: Request) {
   // RAG는 항상 백엔드로 연결 (벡터 스토어 필요)
   let backendBaseUrl = process.env.BACKEND_BASE_URL ?? "http://localhost:8000";
 
-  // URL 끝의 슬래시 제거 (중복 방지)
-  backendBaseUrl = backendBaseUrl.replace(/\/+$/, "");
+  // URL 정리: 끝의 슬래시, 점, 기타 문자 제거
+  backendBaseUrl = backendBaseUrl.trim().replace(/[\/\.]+$/, "");
 
   // 디버깅: 환경 변수 확인
   console.log("[RAG] Backend URL:", backendBaseUrl);
@@ -55,13 +55,34 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isTimeout = errorMessage.includes("aborted") || errorMessage.includes("timeout");
+    const isNetworkError = errorMessage.includes("fetch failed") || errorMessage.includes("ECONNREFUSED") || errorMessage.includes("ENOTFOUND");
+
     console.error("[RAG] Failed to connect to backend:", error);
     console.error("[RAG] Backend URL attempted:", backendBaseUrl);
-    console.error("[RAG] Error details:", error instanceof Error ? error.message : String(error));
+    console.error("[RAG] Error details:", errorMessage);
+    console.error("[RAG] Error type:", {
+      isTimeout,
+      isNetworkError,
+      errorName: error instanceof Error ? error.name : "Unknown",
+    });
+
+    let detailMessage = `Failed to connect to backend at ${backendBaseUrl}.`;
+
+    if (isTimeout) {
+      detailMessage += " Connection timeout. The backend server may be slow or not responding.";
+    } else if (isNetworkError) {
+      detailMessage += " Network error. Please check: 1) EC2 security group allows port 8000 from 0.0.0.0/0, 2) Backend service is running on EC2, 3) Backend is bound to 0.0.0.0:8000 (not localhost).";
+    } else {
+      detailMessage += " Make sure the backend server is running and BACKEND_BASE_URL is set in Vercel environment variables.";
+    }
 
     return new NextResponse(
       JSON.stringify({
-        detail: `Failed to connect to backend at ${backendBaseUrl}. Make sure the backend server is running and BACKEND_BASE_URL is set in Vercel environment variables.`,
+        detail: detailMessage,
+        backendUrl: backendBaseUrl,
+        errorType: isTimeout ? "timeout" : isNetworkError ? "network" : "unknown",
       }),
       {
         status: 503,

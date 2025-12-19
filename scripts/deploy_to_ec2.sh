@@ -65,10 +65,29 @@ ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" << ENDSSH
   git fetch origin main
   git reset --hard origin/main
 
-  # .env 확인
+  # .env 확인 및 생성
   if [ ! -f .env ]; then
-    echo "❌ ERROR: .env file not found!"
-    exit 1
+    echo "⚠️  WARNING: .env file not found! Creating template..."
+    cat > .env << 'ENVEOF'
+# PostgreSQL
+POSTGRES_USER=langchain
+POSTGRES_PASSWORD=changeme_secure_password_here
+POSTGRES_DB=langchain
+DATABASE_URL=postgresql://langchain:changeme_secure_password_here@localhost:5432/langchain
+
+# QLoRA 설정 (CPU 모드)
+USE_QLORA=1
+QLORA_BASE_MODEL_PATH=/opt/langchain/app/model/midm
+LLM_PROVIDER=huggingface
+PYTHONUNBUFFERED=1
+
+# CPU 전용 (CUDA 비활성화)
+CUDA_VISIBLE_DEVICES=
+ENVEOF
+    echo "⚠️  Please edit .env file and update the password and other settings!"
+    echo "⚠️  Continuing with default values for now..."
+  else
+    echo "✅ .env file found"
   fi
 
   # Python 가상환경 확인 및 의존성 설치

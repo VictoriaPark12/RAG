@@ -131,9 +131,27 @@ ENVEOF
     fi
   fi
 
+  # 디스크 공간 정리
+  echo "🧹 Cleaning up disk space..."
+  sudo apt clean
+  sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+
+  # 디스크 공간 확인
+  echo "💾 Checking disk space..."
+  df -h / | tail -1
+
   echo "📦 Installing/updating dependencies..."
   source venv/bin/activate
   pip install --upgrade pip
+
+  # CPU 전용 torch 먼저 설치 (CUDA 없이, 공간 절약)
+  echo "📦 Installing CPU-only PyTorch (saves ~1.5GB)..."
+  pip install torch --index-url https://download.pytorch.org/whl/cpu || {
+    echo "⚠️  Warning: CPU torch installation failed, trying default..."
+  }
+
+  # 나머지 의존성 설치
+  echo "📦 Installing other dependencies..."
   pip install -r app/requirements.txt
 
   # systemd 서비스 재시작

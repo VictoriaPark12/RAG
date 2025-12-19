@@ -117,8 +117,15 @@ ENVEOF
     PYTHON_CMD=python3
   fi
 
-  echo "✅ Using Python: $PYTHON_CMD"
-  $PYTHON_CMD --version 2>&1 || echo "⚠️  Warning: Could not get Python version"
+  # Python 버전 출력 (안전하게)
+  if [ -n "$PYTHON_CMD" ]; then
+    echo "✅ Using Python: $PYTHON_CMD"
+    $PYTHON_CMD --version 2>&1 || echo "⚠️  Warning: Could not get Python version"
+  else
+    echo "✅ Using Python: python3 (default)"
+    python3 --version 2>&1 || echo "⚠️  Warning: Could not get Python version"
+    PYTHON_CMD=python3
+  fi
 
   # Python 가상환경 확인 및 생성
   if [ ! -d venv ]; then
@@ -160,8 +167,8 @@ ENVEOF
   sudo tee /etc/systemd/system/langchain-backend.service > /dev/null << SERVICEEOF
 [Unit]
 Description=LangChain FastAPI Backend
-After=network.target postgresql.service
-Requires=postgresql.service
+After=network.target
+Wants=network.target
 
 [Service]
 Type=simple

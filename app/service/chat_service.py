@@ -359,9 +359,16 @@ def warmup_qlora_from_env() -> bool:
             "device_map": device_map,
         },
     )
-    load_cached_qlora(base_model_path, adapter_path, device_map)
-    print("[QLORA] warmup complete")
-    return True
+    try:
+        load_cached_qlora(base_model_path, adapter_path, device_map)
+        print("[QLORA] warmup complete")
+        return True
+    except FileNotFoundError as e:
+        print(f"[QLORA] warmup skipped: model path not found - {e}")
+        return False
+    except Exception as e:
+        print(f"[QLORA] warmup failed: {e}")
+        return False
 
 
 def format_chat_prompt(messages: list[dict]) -> str:

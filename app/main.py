@@ -154,9 +154,9 @@ async def startup_event():
 
         print("API server is ready!")
 
-        # Required: warm up QLoRA model so first request doesn't pay load cost.
-        if not warmup_qlora_from_env():
-            raise RuntimeError("[QLORA] warmup did not run; check env vars")
+        # Optional: warm up QLoRA model so first request doesn't pay load cost.
+        # If model path is not available, continue without QLoRA.
+        warmup_qlora_from_env()
 
     except Exception as e:
         print(f"[ERROR] Startup error: {e}")

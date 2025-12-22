@@ -135,7 +135,7 @@ ENVEOF
       $PYTHON_CMD -m venv venv
     else
       python3 -m venv venv
-    fi
+  fi
   fi
 
   # 디스크 공간 정리

@@ -84,15 +84,27 @@ def init_llm() -> Union[HuggingFacePipeline, Any]:
     """Initialize LLM based on LLM_PROVIDER environment variable.
 
     Supports:
+    - "openai": OpenAI API (requires OPENAI_API_KEY)
     - "ollama": Fast local inference with Ollama
     - "midm" or other: HuggingFace transformers (slow on CPU)
 
     Returns:
-        LLM instance (HuggingFacePipeline or ChatOllama).
+        LLM instance (ChatOpenAI, HuggingFacePipeline, or ChatOllama).
     """
     llm_provider = os.getenv("LLM_PROVIDER", "midm").lower()
 
-    # Try Ollama first if specified
+    # Try OpenAI first if specified
+    if llm_provider == "openai":
+        print("Using OpenAI for LLM...")
+        try:
+            from core.llm.openai import init_openai_llm  # type: ignore
+            return init_openai_llm()
+        except (ModuleNotFoundError, RuntimeError) as e:
+            print(f"[WARNING] Failed to initialize OpenAI: {e}")
+            print("[INFO] Falling back to HuggingFace transformers...")
+            # Fall through to HuggingFace
+
+    # Try Ollama if specified
     if llm_provider == "ollama":
         print("Using Ollama for LLM...")
         try:

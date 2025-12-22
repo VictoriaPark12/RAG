@@ -122,41 +122,61 @@ async def startup_event():
         vector_store = await init_vector_store()
         print("[OK] Vector store initialized!")
 
-        # Enforced QLoRA mode:
-        # - Must have USE_QLORA=1 and QLORA_BASE_MODEL_PATH set
-        # - Must warm up successfully (fail startup otherwise)
+        # Check LLM provider mode
+        llm_provider = os.getenv("LLM_PROVIDER", "midm").lower()
         use_qlora = os.getenv("USE_QLORA", "0").lower() in {"1", "true", "yes"}
         qlora_base = os.getenv("QLORA_BASE_MODEL_PATH")
+
         logger.info(
-            "[BOOT] env loaded use_qlora=%s qlora_base_set=%s env_path=%s cwd_env=%s",
+            "[BOOT] env loaded llm_provider=%s use_qlora=%s qlora_base_set=%s env_path=%s cwd_env=%s",
+            llm_provider,
             use_qlora,
             bool(qlora_base),
             env_path,
             _cwd_env or None,
         )
-        if not use_qlora or not qlora_base:
-            raise RuntimeError(
-                "QLoRA 모드가 강제되어 있습니다.\n"
-                "다음 환경변수를 설정한 뒤 서버를 다시 시작하세요:\n"
-                "- USE_QLORA=1\n"
-                "- QLORA_BASE_MODEL_PATH=<로컬 모델 폴더 경로>\n"
-            )
 
-        llm = None
-        rag_chain_instance = None
-        print("[QLORA] Enabled: skipping HF LLM init + rag_chain creation")
+        # If OpenAI is selected, initialize OpenAI LLM
+        if llm_provider == "openai":
+            print("[OPENAI] Initializing OpenAI LLM...")
+            llm = init_llm()
+            rag_chain_instance = create_rag_chain(vector_store, llm)
 
-        # Set dependencies for routers
-        rag.set_dependencies(vector_store, rag_chain_instance)
-        search.set_dependencies(vector_store)
-        # In enforced QLoRA mode, chat router uses chat_service directly.
-        chat.set_dependencies(None)
+            # Set dependencies for routers
+            rag.set_dependencies(vector_store, rag_chain_instance)
+            search.set_dependencies(vector_store)
+            chat.set_dependencies(llm)
 
-        print("API server is ready!")
+            print("API server is ready! (OpenAI mode)")
+        # If QLoRA mode is enabled, use QLoRA
+        elif use_qlora and qlora_base:
+            print("[QLORA] Enabled: skipping HF LLM init + rag_chain creation")
+            llm = None
+            rag_chain_instance = None
 
-        # Optional: warm up QLoRA model so first request doesn't pay load cost.
-        # If model path is not available, continue without QLoRA.
-        warmup_qlora_from_env()
+            # Set dependencies for routers
+            rag.set_dependencies(vector_store, rag_chain_instance)
+            search.set_dependencies(vector_store)
+            # In QLoRA mode, chat router uses chat_service directly.
+            chat.set_dependencies(None)
+
+            print("API server is ready! (QLoRA mode)")
+
+            # Optional: warm up QLoRA model so first request doesn't pay load cost.
+            # If model path is not available, continue without QLoRA.
+            warmup_qlora_from_env()
+        else:
+            # Default: Initialize standard LLM (HuggingFace or Ollama)
+            print("[STANDARD] Initializing standard LLM...")
+            llm = init_llm()
+            rag_chain_instance = create_rag_chain(vector_store, llm)
+
+            # Set dependencies for routers
+            rag.set_dependencies(vector_store, rag_chain_instance)
+            search.set_dependencies(vector_store)
+            chat.set_dependencies(llm)
+
+            print("API server is ready! (Standard LLM mode)")
 
     except Exception as e:
         print(f"[ERROR] Startup error: {e}")

@@ -123,7 +123,7 @@ async def startup_event():
         print("[OK] Vector store initialized!")
 
         # Check LLM provider mode
-        llm_provider = os.getenv("LLM_PROVIDER", "midm").lower()
+        llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
         use_qlora = os.getenv("USE_QLORA", "0").lower() in {"1", "true", "yes"}
         qlora_base = os.getenv("QLORA_BASE_MODEL_PATH")
 
@@ -136,7 +136,28 @@ async def startup_event():
             _cwd_env or None,
         )
 
-        # If QLoRA mode is enabled, use QLoRA
+        # If OpenAI is selected, initialize OpenAI LLM (uses openai folder)
+        if llm_provider == "openai":
+            print("[OPENAI] Initializing OpenAI LLM...")
+            # openai 폴더를 Python path에 추가
+            import sys
+            from pathlib import Path
+            repo_root = Path(__file__).parent.parent.parent
+            openai_path = repo_root / "openai"
+            if openai_path.exists() and str(openai_path) not in sys.path:
+                sys.path.insert(0, str(openai_path))
+                print(f"[OPENAI] Added openai folder to Python path: {openai_path}")
+
+            llm = init_llm()
+            rag_chain_instance = create_rag_chain(vector_store, llm)
+
+            # Set dependencies for routers
+            rag.set_dependencies(vector_store, rag_chain_instance)
+            search.set_dependencies(vector_store)
+            chat.set_dependencies(llm)
+
+            print("API server is ready! (OpenAI mode)")
+        # If QLoRA mode is enabled, use QLoRA (deprecated, midm 모델 사용 안 함)
         elif use_qlora and qlora_base:
             print("[QLORA] Enabled: skipping HF LLM init + rag_chain creation")
             llm = None

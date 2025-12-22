@@ -84,13 +84,32 @@ def init_llm() -> Union[HuggingFacePipeline, Any]:
     """Initialize LLM based on LLM_PROVIDER environment variable.
 
     Supports:
+    - "openai": OpenAI API (requires OPENAI_API_KEY, uses openai folder)
     - "ollama": Fast local inference with Ollama
     - "midm" or other: HuggingFace transformers (slow on CPU)
 
     Returns:
-        LLM instance (HuggingFacePipeline, or ChatOllama).
+        LLM instance (ChatOpenAI, HuggingFacePipeline, or ChatOllama).
     """
-    llm_provider = os.getenv("LLM_PROVIDER", "midm").lower()
+    llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
+
+    # Try OpenAI first if specified (uses openai folder)
+    if llm_provider == "openai":
+        print("Using OpenAI for LLM...")
+        try:
+            # openai 폴더에서 모듈 import
+            import sys
+            from pathlib import Path
+            repo_root = Path(__file__).parent.parent.parent.parent
+            openai_path = repo_root / "openai"
+            if openai_path.exists() and str(openai_path) not in sys.path:
+                sys.path.insert(0, str(openai_path))
+            from app.core.llm.openai import init_openai_llm  # type: ignore
+            return init_openai_llm()
+        except (ModuleNotFoundError, RuntimeError, ImportError) as e:
+            print(f"[WARNING] Failed to initialize OpenAI: {e}")
+            print("[INFO] Falling back to HuggingFace transformers...")
+            # Fall through to HuggingFace
 
     # Try Ollama if specified
     if llm_provider == "ollama":
@@ -103,7 +122,8 @@ def init_llm() -> Union[HuggingFacePipeline, Any]:
             print("[INFO] Falling back to HuggingFace transformers...")
             # Fall through to HuggingFace
 
-    # Use HuggingFace transformers
+    # Use HuggingFace transformers (midm 모델 - 더 이상 사용 안 함)
+    print("[WARNING] HuggingFace/midm model is deprecated. Please use LLM_PROVIDER=openai")
     return _init_huggingface_llm()
 
 

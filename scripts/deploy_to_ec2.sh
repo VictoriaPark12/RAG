@@ -65,20 +65,22 @@ ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" << ENDSSH
   git fetch origin main
   git reset --hard origin/main
 
-  # openai 폴더 확인
+  # openai 폴더 확인 (필수)
   echo "🔍 Verifying openai folder..."
   if [ -d "openai" ]; then
     echo "✅ openai folder exists"
     if [ -f "openai/app/core/llm/openai.py" ]; then
       echo "✅ openai.py file found"
     else
-      echo "⚠️  WARNING: openai.py file not found in openai/app/core/llm/"
+      echo "❌ ERROR: openai.py file not found in openai/app/core/llm/"
+      exit 1
     fi
   else
-    echo "⚠️  WARNING: openai folder not found"
+    echo "❌ ERROR: openai folder not found"
+    exit 1
   fi
 
-  # .env 확인 및 생성
+  # .env 확인 및 생성 (OpenAI 모드만 사용, midm 모델 사용 안 함)
   if [ ! -f .env ]; then
     echo "⚠️  WARNING: .env file not found! Creating template..."
     cat > .env << 'ENVEOF'
@@ -88,19 +90,37 @@ POSTGRES_PASSWORD=changeme_secure_password_here
 POSTGRES_DB=langchain
 DATABASE_URL=postgresql://langchain:changeme_secure_password_here@localhost:5432/langchain
 
-# QLoRA 설정 (CPU 모드)
-USE_QLORA=1
-QLORA_BASE_MODEL_PATH=/opt/langchain/app/model/midm
-LLM_PROVIDER=huggingface
+# OpenAI 설정 (midm 모델 사용 안 함)
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_TEMPERATURE=0.7
 PYTHONUNBUFFERED=1
 
-# CPU 전용 (CUDA 비활성화)
-CUDA_VISIBLE_DEVICES=
+# midm 모델 비활성화
+USE_QLORA=0
 ENVEOF
-    echo "⚠️  Please edit .env file and update the password and other settings!"
+    echo "⚠️  Please edit .env file and update OPENAI_API_KEY and other settings!"
     echo "⚠️  Continuing with default values for now..."
   else
     echo "✅ .env file found"
+    # .env에 LLM_PROVIDER=openai가 없으면 추가
+    if ! grep -q "^LLM_PROVIDER=openai" .env; then
+      # 기존 LLM_PROVIDER 라인 수정 또는 추가
+      if grep -q "^LLM_PROVIDER=" .env; then
+        sed -i 's/^LLM_PROVIDER=.*/LLM_PROVIDER=openai/' .env
+      else
+        echo "LLM_PROVIDER=openai" >> .env
+      fi
+      echo "✅ Set LLM_PROVIDER=openai in .env"
+    fi
+    # USE_QLORA 비활성화
+    if grep -q "^USE_QLORA=" .env; then
+      sed -i 's/^USE_QLORA=.*/USE_QLORA=0/' .env
+    else
+      echo "USE_QLORA=0" >> .env
+    fi
+    echo "✅ Disabled QLoRA/midm model in .env"
   fi
 
   # Python 버전 확인 및 가상환경 생성
@@ -164,15 +184,22 @@ ENVEOF
   source venv/bin/activate
   pip install --upgrade pip
 
-  # CPU 전용 torch 먼저 설치 (CUDA 없이, 공간 절약)
-  echo "📦 Installing CPU-only PyTorch (saves ~1.5GB)..."
-  pip install torch --index-url https://download.pytorch.org/whl/cpu || {
-    echo "⚠️  Warning: CPU torch installation failed, trying default..."
-  }
-
-  # 나머지 의존성 설치
-  echo "📦 Installing other dependencies..."
-  pip install -r app/requirements.txt
+  # OpenAI 관련 의존성만 설치 (midm 모델 사용 안 함)
+  echo "📦 Installing OpenAI dependencies..."
+  pip install langchain-openai>=0.0.5
+  pip install python-dotenv>=1.0.0
+  pip install fastapi>=0.104.0
+  pip install uvicorn[standard]>=0.24.0
+  pip install pydantic>=2.0.0
+  pip install langchain-core>=0.1.0
+  pip install langchain-postgres>=0.0.1
+  pip install psycopg2-binary>=2.9.5
+  pip install psycopg>=3.1.0
+  pip install pgvector>=0.2.4
+  pip install sentence-transformers>=2.2.0
+  pip install langchain-huggingface>=0.0.1
+  pip install numpy>=1.24.0
+  echo "✅ OpenAI dependencies installed"
 
   # systemd 서비스 파일 생성/업데이트
   echo "⚙️ Creating/updating systemd service..."
@@ -187,9 +214,12 @@ Wants=network.target
 Type=simple
 User=\$CURRENT_USER
 Group=\$CURRENT_USER
-WorkingDirectory=$DEPLOY_PATH/app
+# openai 폴더를 Python path에 추가하고 midm/app/main.py 사용 (LLM_PROVIDER=openai로 설정됨)
+WorkingDirectory=$DEPLOY_PATH/midm/app
 Environment="PATH=$DEPLOY_PATH/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$DEPLOY_PATH/.env
+# Python path에 openai 폴더 추가 (openai 모듈 import 가능하도록)
+Environment="PYTHONPATH=$DEPLOY_PATH:$DEPLOY_PATH/openai:$DEPLOY_PATH/midm/app"
 ExecStart=$DEPLOY_PATH/venv/bin/python main.py
 Restart=always
 RestartSec=10

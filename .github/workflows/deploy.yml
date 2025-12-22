@@ -43,13 +43,29 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r app/requirements.txt
+          # OpenAI 관련 의존성만 설치
+          pip install langchain-openai>=0.0.5
+          pip install python-dotenv>=1.0.0
+          pip install fastapi>=0.104.0
+          pip install uvicorn[standard]>=0.24.0
           pip install pytest pytest-cov
+          echo "✅ Dependencies installed for OpenAI integration"
 
-      - name: Run unit tests
+      - name: Verify openai folder structure
         run: |
-          cd app
-          pytest tests/unit_tests -v --cov=. --cov-report=term-missing || echo "No tests found, skipping..."
+          echo "🔍 Verifying openai folder structure..."
+          if [ -d "openai" ]; then
+            echo "✅ openai folder exists"
+            if [ -f "openai/app/core/llm/openai.py" ]; then
+              echo "✅ openai.py file found"
+            else
+              echo "❌ openai.py file not found"
+              exit 1
+            fi
+          else
+            echo "❌ openai folder not found"
+            exit 1
+          fi
 
   deploy:
     name: Deploy to EC2

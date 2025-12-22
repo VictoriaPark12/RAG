@@ -136,18 +136,6 @@ async def startup_event():
             _cwd_env or None,
         )
 
-        # If OpenAI is selected, initialize OpenAI LLM
-        if llm_provider == "openai":
-            print("[OPENAI] Initializing OpenAI LLM...")
-            llm = init_llm()
-            rag_chain_instance = create_rag_chain(vector_store, llm)
-
-            # Set dependencies for routers
-            rag.set_dependencies(vector_store, rag_chain_instance)
-            search.set_dependencies(vector_store)
-            chat.set_dependencies(llm)
-
-            print("API server is ready! (OpenAI mode)")
         # If QLoRA mode is enabled, use QLoRA
         elif use_qlora and qlora_base:
             print("[QLORA] Enabled: skipping HF LLM init + rag_chain creation")

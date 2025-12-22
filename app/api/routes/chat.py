@@ -61,22 +61,38 @@ async def chat(request: ChatRequest, raw_request: Request) -> ChatResponse:
         if use_qlora and base_model_path:
             from service.chat_service import chat_with_qlora  # type: ignore
 
-            answer_text = chat_with_qlora(
-                base_model_path=base_model_path,
-                adapter_path=adapter_path,
-                message=request.message,
-                conversation_history=request.conversation_history or [],
-                max_new_tokens=int(os.getenv("QLORA_MAX_NEW_TOKENS", "256")),
-                request_id=request_id,
-            )
-            logger.info(
-                "[CHAT] id=%s backend=qlora answer_preview=%r",
-                request_id,
-                answer_text[:120],
-            )
-            return ChatResponse(message=request.message, answer=answer_text)
+            try:
+                answer_text = chat_with_qlora(
+                    base_model_path=base_model_path,
+                    adapter_path=adapter_path,
+                    message=request.message,
+                    conversation_history=request.conversation_history or [],
+                    max_new_tokens=int(os.getenv("QLORA_MAX_NEW_TOKENS", "256")),
+                    request_id=request_id,
+                )
+                logger.info(
+                    "[CHAT] id=%s backend=qlora answer_preview=%r",
+                    request_id,
+                    answer_text[:120],
+                )
+                return ChatResponse(message=request.message, answer=answer_text)
+            except FileNotFoundError as e:
+                logger.error(f"[CHAT] id={request_id} QLoRA model not found: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"QLoRA 모델을 찾을 수 없습니다: {base_model_path}. 모델 경로를 확인하세요.",
+                ) from e
+            except Exception as e:
+                logger.exception(f"[CHAT] id={request_id} QLoRA error: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"QLoRA 모델 실행 중 오류 발생: {str(e)}",
+                ) from e
 
-        raise HTTPException(status_code=500, detail="LLM not initialized")
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM이 초기화되지 않았습니다. USE_QLORA={use_qlora}, QLORA_BASE_MODEL_PATH={base_model_path}",
+        )
 
     try:
         history = request.conversation_history or []
@@ -141,5 +157,9 @@ async def chat(request: ChatRequest, raw_request: Request) -> ChatResponse:
             answer_text = str(getattr(answer, "content", answer)).strip()
 
         return ChatResponse(message=request.message, answer=answer_text)
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"[CHAT] id={request_id} Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=f"채팅 처리 중 오류 발생: {str(e)}") from e

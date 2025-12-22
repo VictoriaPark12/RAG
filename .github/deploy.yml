@@ -123,6 +123,50 @@ jobs:
           chmod +x scripts/deploy_to_ec2.sh
           SSH_KEY_PATH=~/.ssh/deploy_key bash scripts/deploy_to_ec2.sh
 
+      - name: Verify openai folder deployment
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          DEPLOY_PATH: /opt/langchain
+        run: |
+          echo "🔍 Verifying openai folder deployment..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$EC2_USER@$EC2_HOST" << ENDSSH
+            DEPLOY_PATH="/opt/langchain"
+            if [ -d "\$DEPLOY_PATH/openai" ]; then
+              echo "✅ openai folder exists"
+              if [ -f "\$DEPLOY_PATH/openai/app/core/llm/openai.py" ]; then
+                echo "✅ openai.py file found"
+                if [ -f "\$DEPLOY_PATH/openai/__init__.py" ]; then
+                  echo "✅ openai/__init__.py found"
+                  if [ -f "\$DEPLOY_PATH/openai/app/__init__.py" ]; then
+                    echo "✅ openai/app/__init__.py found"
+                    if [ -f "\$DEPLOY_PATH/openai/app/core/__init__.py" ]; then
+                      echo "✅ openai/app/core/__init__.py found"
+                      if [ -f "\$DEPLOY_PATH/openai/app/core/llm/__init__.py" ]; then
+                        echo "✅ openai/app/core/llm/__init__.py found"
+                        echo "✅ openai folder structure is correct"
+                      else
+                        echo "⚠️  openai/app/core/llm/__init__.py not found"
+                      fi
+                    else
+                      echo "⚠️  openai/app/core/__init__.py not found"
+                    fi
+                  else
+                    echo "⚠️  openai/app/__init__.py not found"
+                  fi
+                else
+                  echo "⚠️  openai/__init__.py not found"
+                fi
+              else
+                echo "❌ openai.py file not found"
+                exit 1
+              fi
+            else
+              echo "❌ openai folder not found"
+              exit 1
+            fi
+          ENDSSH
+
       - name: Notify deployment status
         if: always()
         run: |

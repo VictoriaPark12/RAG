@@ -1,0 +1,2 @@
+"""OpenAI application package."""
+

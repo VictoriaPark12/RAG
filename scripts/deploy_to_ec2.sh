@@ -65,6 +65,19 @@ ssh -i "$SSH_KEY_PATH" "$EC2_USER@$EC2_HOST" << ENDSSH
   git fetch origin main
   git reset --hard origin/main
 
+  # openai 폴더 확인
+  echo "🔍 Verifying openai folder..."
+  if [ -d "openai" ]; then
+    echo "✅ openai folder exists"
+    if [ -f "openai/app/core/llm/openai.py" ]; then
+      echo "✅ openai.py file found"
+    else
+      echo "⚠️  WARNING: openai.py file not found in openai/app/core/llm/"
+    fi
+  else
+    echo "⚠️  WARNING: openai folder not found"
+  fi
+
   # .env 확인 및 생성
   if [ ! -f .env ]; then
     echo "⚠️  WARNING: .env file not found! Creating template..."

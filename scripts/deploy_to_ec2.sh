@@ -289,10 +289,12 @@ ENVEOF
 
   # OpenAI 관련 의존성만 설치 (midm 모델 사용 안 함)
   echo "📦 Installing OpenAI dependencies..."
-  # openai 패키지를 먼저 설치 (langchain-openai의 의존성)
+  # openai 패키지를 먼저 강제 재설치 (langchain-openai의 의존성)
   # langchain-openai는 openai>=1.109.1을 요구함
-  pip install "openai>=1.109.1,<3.0.0"
-  pip install langchain-openai>=0.0.5
+  # --force-reinstall로 기존 버전 제거 후 재설치
+  pip uninstall -y openai 2>/dev/null || true
+  pip install --force-reinstall --no-cache-dir "openai>=1.109.1,<3.0.0"
+  pip install --upgrade langchain-openai>=0.0.5
   pip install python-dotenv>=1.0.0
   pip install fastapi>=0.104.0
   pip install uvicorn[standard]>=0.24.0
@@ -326,8 +328,10 @@ Environment="DEPLOY_PATH=$DEPLOY_PATH"
 Environment="PATH=$DEPLOY_PATH/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$DEPLOY_PATH/.env
 # Python path에 openai 폴더 추가 (openai 모듈 import 가능하도록)
-# openai 폴더를 먼저 추가하여 app.core.llm.openai를 import할 수 있도록 함
-Environment="PYTHONPATH=$DEPLOY_PATH/openai:$DEPLOY_PATH:$DEPLOY_PATH/midm/app"
+# 주의: $DEPLOY_PATH/openai는 app.core.llm.openai를 import하기 위해 필요하지만,
+# 실제 openai 패키지와 이름 충돌을 피하기 위해 순서를 조정
+# 시스템 패키지가 먼저 로드되도록 하되, app.core.llm.openai는 여전히 import 가능해야 함
+Environment="PYTHONPATH=$DEPLOY_PATH:$DEPLOY_PATH/openai:$DEPLOY_PATH/midm/app"
 ExecStart=$DEPLOY_PATH/venv/bin/python main.py
 Restart=always
 RestartSec=10

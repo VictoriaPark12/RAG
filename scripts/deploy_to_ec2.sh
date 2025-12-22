@@ -319,10 +319,12 @@ User=\$CURRENT_USER
 Group=\$CURRENT_USER
 # openai 폴더를 Python path에 추가하고 midm/app/main.py 사용 (LLM_PROVIDER=openai로 설정됨)
 WorkingDirectory=$DEPLOY_PATH/midm/app
+Environment="DEPLOY_PATH=$DEPLOY_PATH"
 Environment="PATH=$DEPLOY_PATH/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=$DEPLOY_PATH/.env
 # Python path에 openai 폴더 추가 (openai 모듈 import 가능하도록)
-Environment="PYTHONPATH=$DEPLOY_PATH:$DEPLOY_PATH/openai:$DEPLOY_PATH/midm/app"
+# openai 폴더를 먼저 추가하여 app.core.llm.openai를 import할 수 있도록 함
+Environment="PYTHONPATH=$DEPLOY_PATH/openai:$DEPLOY_PATH:$DEPLOY_PATH/midm/app"
 ExecStart=$DEPLOY_PATH/venv/bin/python main.py
 Restart=always
 RestartSec=10

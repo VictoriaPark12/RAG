@@ -289,6 +289,9 @@ ENVEOF
 
   # OpenAI 관련 의존성만 설치 (midm 모델 사용 안 함)
   echo "📦 Installing OpenAI dependencies..."
+  # openai 패키지를 먼저 설치 (langchain-openai의 의존성)
+  # langchain-openai는 openai>=1.109.1을 요구함
+  pip install "openai>=1.109.1,<3.0.0"
   pip install langchain-openai>=0.0.5
   pip install python-dotenv>=1.0.0
   pip install fastapi>=0.104.0

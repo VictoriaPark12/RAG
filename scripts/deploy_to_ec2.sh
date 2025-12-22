@@ -123,6 +123,57 @@ ENVEOF
     echo "✅ Disabled QLoRA/midm model in .env"
   fi
 
+  # 디스크 공간 정리 (Python 설치 전에 먼저 실행)
+  echo "🧹 Cleaning up disk space before Python installation..."
+  
+  # 디스크 사용률 확인
+  DISK_USAGE=\$(df / | tail -1 | awk '{print \$5}' | sed 's/%//')
+  echo "💾 Current disk usage: \${DISK_USAGE}%"
+  
+  if [ "\$DISK_USAGE" -gt 80 ]; then
+    echo "⚠️  Disk usage is high (\${DISK_USAGE}%). Performing aggressive cleanup..."
+    
+    # apt 캐시 정리
+    echo "🧹 Cleaning apt cache..."
+    sudo apt clean 2>/dev/null || true
+    sudo apt autoclean 2>/dev/null || true
+    
+    # 임시 파일 정리
+    echo "🧹 Cleaning temporary files..."
+    sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+    
+    # 오래된 로그 파일 정리
+    echo "🧹 Cleaning old log files..."
+    sudo journalctl --vacuum-time=3d 2>/dev/null || true
+    sudo find /var/log -type f -name "*.log" -mtime +7 -delete 2>/dev/null || true
+    sudo find /var/log -type f -name "*.gz" -delete 2>/dev/null || true
+    
+    # 오래된 백업 파일 정리 (7일 이상 된 백업)
+    if [ -d "$DEPLOY_PATH" ]; then
+      echo "🧹 Cleaning old backups..."
+      find $DEPLOY_PATH -name "backup-*" -type d -mtime +7 -exec rm -rf {} + 2>/dev/null || true
+    fi
+    
+    # 패키지 목록 캐시 정리
+    echo "🧹 Cleaning package lists..."
+    sudo rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+    
+    # 디스크 공간 재확인
+    DISK_USAGE_AFTER=\$(df / | tail -1 | awk '{print \$5}' | sed 's/%//')
+    echo "💾 Disk usage after cleanup: \${DISK_USAGE_AFTER}%"
+    
+    if [ "\$DISK_USAGE_AFTER" -gt 95 ]; then
+      echo "❌ ERROR: Disk space is still critically low (\${DISK_USAGE_AFTER}%)"
+      echo "Please manually free up disk space on the EC2 instance"
+      df -h /
+      exit 1
+    fi
+  else
+    # 기본 정리만 수행
+    sudo apt clean 2>/dev/null || true
+    sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+  fi
+
   # Python 버전 확인 및 가상환경 생성
   echo "🐍 Checking Python version..."
   PYTHON_CMD=""
@@ -139,6 +190,13 @@ ENVEOF
 
   if [ -z "$PYTHON_CMD" ]; then
     echo "❌ Python 3 not found. Installing Python 3..."
+    # 디스크 공간 재확인
+    DISK_USAGE=\$(df / | tail -1 | awk '{print \$5}' | sed 's/%//')
+    if [ "\$DISK_USAGE" -gt 95 ]; then
+      echo "❌ ERROR: Cannot install Python - disk space too low (\${DISK_USAGE}%)"
+      df -h /
+      exit 1
+    fi
     sudo apt update
     sudo apt install -y python3 python3-venv python3-pip
     # 설치 후 명시적으로 python3 사용
@@ -168,17 +226,16 @@ ENVEOF
       $PYTHON_CMD -m venv venv
     else
       python3 -m venv venv
-  fi
+    fi
   fi
 
-  # 디스크 공간 정리
-  echo "🧹 Cleaning up disk space..."
-  sudo apt clean
-  sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
-
-  # 디스크 공간 확인
-  echo "💾 Checking disk space..."
+  # 디스크 공간 최종 확인
+  echo "💾 Final disk space check..."
   df -h / | tail -1
+  DISK_USAGE=\$(df / | tail -1 | awk '{print \$5}' | sed 's/%//')
+  if [ "\$DISK_USAGE" -gt 95 ]; then
+    echo "⚠️  WARNING: Disk usage is very high (\${DISK_USAGE}%). Installation may fail."
+  fi
 
   echo "📦 Installing/updating dependencies..."
   source venv/bin/activate

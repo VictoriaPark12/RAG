@@ -134,8 +134,17 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
           DEPLOY_PATH: /opt/langchain
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Deploying to: $DEPLOY_PATH"
+          # OPENAI_API_KEY 확인 (보안을 위해 일부만 출력)
+          if [ -n "$OPENAI_API_KEY" ]; then
+            KEY_PREVIEW="${OPENAI_API_KEY:0:10}...${OPENAI_API_KEY: -4}"
+            echo "✅ OPENAI_API_KEY found in secrets (preview: $KEY_PREVIEW)"
+          else
+            echo "⚠️  WARNING: OPENAI_API_KEY not found in GitHub Secrets"
+            echo "   The deployment script will check for it in EC2's .env file"
+          fi
           chmod +x scripts/deploy_to_ec2.sh
           SSH_KEY_PATH=~/.ssh/deploy_key bash scripts/deploy_to_ec2.sh
 

@@ -208,34 +208,59 @@ ENVEOF
     echo "✅ Disabled QLoRA/midm model in .env"
   fi
 
-  # .env 파일에 OPENAI_API_KEY 확인 및 경고
+  # .env 파일에 OPENAI_API_KEY 확인 및 검증 (필수)
   echo "🔍 Checking OPENAI_API_KEY in .env file..."
+  OPENAI_KEY_VALID=false
+  
   if [ -f .env ]; then
     # 주석이 아닌 OPENAI_API_KEY 라인 찾기
     OPENAI_KEY_LINE=\$(grep -E "^[^#]*OPENAI_API_KEY=" .env | head -1)
     if [ -n "\$OPENAI_KEY_LINE" ]; then
-      OPENAI_KEY_VALUE=\$(echo "\$OPENAI_KEY_LINE" | cut -d'=' -f2- | tr -d ' ')
+      OPENAI_KEY_VALUE=\$(echo "\$OPENAI_KEY_LINE" | cut -d'=' -f2- | tr -d ' ' | tr -d '"' | tr -d "'")
       if [ -n "\$OPENAI_KEY_VALUE" ] && [ "\$OPENAI_KEY_VALUE" != "your_openai_api_key_here" ]; then
         OPENAI_KEY_LENGTH=\$(echo -n "\$OPENAI_KEY_VALUE" | wc -c)
-        if [ \$OPENAI_KEY_LENGTH -gt 10 ]; then
+        if [ \$OPENAI_KEY_LENGTH -gt 20 ]; then
           echo "✅ OPENAI_API_KEY is set in .env file (length: \$OPENAI_KEY_LENGTH characters)"
+          OPENAI_KEY_VALID=true
         else
-          echo "⚠️  WARNING: OPENAI_API_KEY in .env appears to be too short (length: \$OPENAI_KEY_LENGTH)"
-          echo "⚠️  Please set a valid OPENAI_API_KEY in $DEPLOY_PATH/.env"
+          echo "❌ ERROR: OPENAI_API_KEY in .env is too short (length: \$OPENAI_KEY_LENGTH, minimum: 20)"
         fi
       else
-        echo "⚠️  WARNING: OPENAI_API_KEY is set but appears to be empty or placeholder"
-        echo "⚠️  Please set a valid OPENAI_API_KEY in $DEPLOY_PATH/.env"
-        echo "⚠️  Example: OPENAI_API_KEY=sk-..."
+        echo "❌ ERROR: OPENAI_API_KEY is set but appears to be empty or placeholder"
       fi
     else
-      echo "⚠️  WARNING: OPENAI_API_KEY not found in .env file"
-      echo "⚠️  Please add OPENAI_API_KEY to $DEPLOY_PATH/.env"
-      echo "⚠️  Example: OPENAI_API_KEY=sk-..."
+      echo "❌ ERROR: OPENAI_API_KEY not found in .env file"
     fi
   else
-    echo "⚠️  WARNING: .env file not found at $DEPLOY_PATH/.env"
-    echo "⚠️  Creating .env file template..."
+    echo "❌ ERROR: .env file not found at $DEPLOY_PATH/.env"
+  fi
+  
+  # OPENAI_API_KEY가 유효하지 않으면 배포 중단
+  if [ "\$OPENAI_KEY_VALID" != "true" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "❌ DEPLOYMENT BLOCKED: OPENAI_API_KEY is required"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Please set OPENAI_API_KEY in $DEPLOY_PATH/.env file:"
+    echo ""
+    echo "  Option 1: Edit .env file on EC2:"
+    echo "    ssh \$EC2_USER@\$EC2_HOST"
+    echo "    cd $DEPLOY_PATH"
+    echo "    nano .env  # or vi .env"
+    echo "    # Add: OPENAI_API_KEY=sk-your-actual-api-key-here"
+    echo ""
+    echo "  Option 2: Set via environment variable in deployment:"
+    echo "    # This requires modifying the deployment script"
+    echo ""
+    echo "Current .env file location: $DEPLOY_PATH/.env"
+    if [ -f .env ]; then
+      echo ""
+      echo "Current .env file contents (OPENAI_API_KEY line only):"
+      grep -E "^[^#]*OPENAI_API_KEY" .env || echo "  (not found)"
+    fi
+    echo ""
+    exit 1
   fi
 
   # Python 설치 전 디스크 공간 확인 (이미 정리는 Git pull 전에 수행됨)

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { callRAGBackend } from "@/app/api/rag/backend";
+import { callChatBackend } from "@/app/api/chat/backend";
 
 interface RAGResponse {
   question: string;
@@ -59,64 +61,25 @@ export default function Home() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300000);
 
-      // 백엔드 URL 설정 (환경 변수 또는 fallback)
-      // NEXT_PUBLIC_ 접두사가 있어야 클라이언트에서 접근 가능
-      const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://ec2-13-124-217-222.ap-northeast-2.compute.amazonaws.com:8000").replace(/\/$/, ""); // trailing slash 제거
-      const endpoint = mode === "rag" ? "/rag" : "/chat";
-      const fullUrl = `${backendUrl}${endpoint}`;
-      const requestBody = mode === "rag"
-        ? {
-            question: query,
-            k: 3,
-            conversation_history: conversationHistory,
-          }
-        : {
-            message: query,
-            conversation_history: conversationHistory,
-          };
-
-      console.log(`[CLIENT] Calling backend directly:`, {
-        url: fullUrl,
-        method: "POST",
-        mode,
-        backendUrl,
-        endpoint,
-      });
-
-      const res = await fetch(fullUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      console.log("Response status:", res.status, "URL:", fullUrl);
-
-      if (!res.ok) {
-        let errorData: any = { detail: "Unknown error" };
-        try {
-          const text = await res.text();
-          console.error("Error response text:", text);
-          errorData = text ? JSON.parse(text) : { detail: `HTTP ${res.status} ${res.statusText}` };
-        } catch (e) {
-          console.error("Failed to parse error response:", e);
-          errorData = { detail: `HTTP ${res.status} ${res.statusText}` };
-        }
-        
-        // 405 에러 특별 처리
-        if (res.status === 405) {
-          console.error("[405] Method Not Allowed - Check if backend is running and CORS is configured");
-          throw new Error(`백엔드 연결 오류 (405): 요청 메서드가 허용되지 않습니다. 백엔드 서버가 실행 중인지 확인하세요. URL: ${fullUrl}`);
-        }
-        
-        console.error("Error response:", errorData);
-        throw new Error(`HTTP error! status: ${res.status} - ${errorData.detail || errorData.message || "Unknown error"}`);
+      // 유틸리티 함수를 사용하여 백엔드 직접 호출
+      let data: RAGResponse | ChatResponse;
+      
+      if (mode === "rag") {
+        console.log(`[CLIENT] Calling RAG backend`);
+        data = await callRAGBackend({
+          question: query,
+          k: 3,
+          conversation_history: conversationHistory,
+        });
+      } else {
+        console.log(`[CLIENT] Calling Chat backend`);
+        data = await callChatBackend({
+          message: query,
+          conversation_history: conversationHistory,
+        });
       }
 
-      const data = await res.json();
+      clearTimeout(timeoutId);
       console.log("Success response:", data);
 
       if (mode === "rag") {
@@ -140,17 +103,8 @@ export default function Home() {
       if (err instanceof Error) {
         if (err.name === "AbortError") {
           errorMessage = "요청 시간이 초과되었습니다. 서버가 아직 준비 중일 수 있습니다. 잠시 후 다시 시도해주세요.";
-        } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-          // Mixed Content 또는 네트워크 오류
-          const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://ec2-13-124-217-222.ap-northeast-2.compute.amazonaws.com:8000";
-          const isHttpBackend = backendUrl.startsWith("http://");
-          
-          if (isHttps && isHttpBackend) {
-            errorMessage = "HTTPS 페이지에서 HTTP 백엔드로 연결할 수 없습니다. 백엔드에 HTTPS 설정이 필요합니다.";
-          } else {
-            errorMessage = "서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.";
-          }
+        } else if (err.message.includes("Failed to fetch")) {
+          errorMessage = "서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.";
         } else {
           errorMessage = err.message;
         }

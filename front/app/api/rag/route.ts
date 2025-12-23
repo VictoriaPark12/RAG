@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // 백엔드 URL 설정 (환경 변수만 사용)
-    // @ts-expect-error - Node.js process 타입 (Next.js 서버 사이드에서 사용 가능)
+    // @ts-ignore - Next.js 서버 사이드에서 process.env는 사용 가능하지만 타입 정의가 불완전함
     let backendBaseUrl = process.env.BACKEND_BASE_URL;
     
     // 디버깅: 환경 변수 값 로그 (포트 확인용)

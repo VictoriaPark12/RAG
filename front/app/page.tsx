@@ -140,8 +140,17 @@ export default function Home() {
       if (err instanceof Error) {
         if (err.name === "AbortError") {
           errorMessage = "요청 시간이 초과되었습니다. 서버가 아직 준비 중일 수 있습니다. 잠시 후 다시 시도해주세요.";
-        } else if (err.message.includes("Failed to fetch")) {
-          errorMessage = "서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.";
+        } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+          // Mixed Content 또는 네트워크 오류
+          const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://ec2-13-124-217-222.ap-northeast-2.compute.amazonaws.com:8000";
+          const isHttpBackend = backendUrl.startsWith("http://");
+          
+          if (isHttps && isHttpBackend) {
+            errorMessage = "HTTPS 페이지에서 HTTP 백엔드로 연결할 수 없습니다. 백엔드에 HTTPS 설정이 필요합니다.";
+          } else {
+            errorMessage = "서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.";
+          }
         } else {
           errorMessage = err.message;
         }

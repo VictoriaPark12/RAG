@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
 
     // 백엔드 URL 설정 (환경 변수만 사용)
     // @ts-expect-error - Node.js process 타입 (Next.js 서버 사이드에서 사용 가능)
-    const backendBaseUrl = process.env.BACKEND_BASE_URL;
+    let backendBaseUrl = process.env.BACKEND_BASE_URL;
     
     if (!backendBaseUrl) {
       console.error("[API Route] BACKEND_BASE_URL environment variable is not set");
@@ -15,6 +15,17 @@ export async function POST(request: NextRequest) {
         { detail: "Backend URL is not configured. Please set BACKEND_BASE_URL environment variable." },
         { status: 500 }
       );
+    }
+
+    // URL 정규화: 포트가 없으면 8000 추가, trailing slash 제거
+    backendBaseUrl = backendBaseUrl.trim().replace(/\/$/, ""); // trailing slash 제거
+    
+    // 포트가 명시되지 않았거나 포트 80인 경우 포트 8000으로 변경
+    const urlObj = new URL(backendBaseUrl);
+    if (!urlObj.port || urlObj.port === "80") {
+      urlObj.port = "8000";
+      backendBaseUrl = urlObj.toString().replace(/\/$/, "");
+      console.log(`[API Route] Port not specified or port 80 detected, using port 8000: ${backendBaseUrl}`);
     }
 
     const backendUrl = `${backendBaseUrl}/chat`;

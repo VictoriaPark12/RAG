@@ -61,8 +61,9 @@ export default function Home() {
 
       // 백엔드 URL 설정 (환경 변수 또는 fallback)
       // NEXT_PUBLIC_ 접두사가 있어야 클라이언트에서 접근 가능
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://ec2-13-124-217-222.ap-northeast-2.compute.amazonaws.com:8000";
+      const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://ec2-13-124-217-222.ap-northeast-2.compute.amazonaws.com:8000").replace(/\/$/, ""); // trailing slash 제거
       const endpoint = mode === "rag" ? "/rag" : "/chat";
+      const fullUrl = `${backendUrl}${endpoint}`;
       const requestBody = mode === "rag"
         ? {
             question: query,
@@ -74,9 +75,15 @@ export default function Home() {
             conversation_history: conversationHistory,
           };
 
-      console.log(`[CLIENT] Calling backend directly: ${backendUrl}${endpoint}`);
+      console.log(`[CLIENT] Calling backend directly:`, {
+        url: fullUrl,
+        method: "POST",
+        mode,
+        backendUrl,
+        endpoint,
+      });
 
-      const res = await fetch(`${backendUrl}${endpoint}`, {
+      const res = await fetch(fullUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -86,12 +93,27 @@ export default function Home() {
       });
 
       clearTimeout(timeoutId);
-      console.log("Response status:", res.status);
+      console.log("Response status:", res.status, "URL:", fullUrl);
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ detail: "Unknown error" }));
+        let errorData: any = { detail: "Unknown error" };
+        try {
+          const text = await res.text();
+          console.error("Error response text:", text);
+          errorData = text ? JSON.parse(text) : { detail: `HTTP ${res.status} ${res.statusText}` };
+        } catch (e) {
+          console.error("Failed to parse error response:", e);
+          errorData = { detail: `HTTP ${res.status} ${res.statusText}` };
+        }
+        
+        // 405 에러 특별 처리
+        if (res.status === 405) {
+          console.error("[405] Method Not Allowed - Check if backend is running and CORS is configured");
+          throw new Error(`백엔드 연결 오류 (405): 요청 메서드가 허용되지 않습니다. 백엔드 서버가 실행 중인지 확인하세요. URL: ${fullUrl}`);
+        }
+        
         console.error("Error response:", errorData);
-        throw new Error(`HTTP error! status: ${res.status} - ${errorData.detail || ""}`);
+        throw new Error(`HTTP error! status: ${res.status} - ${errorData.detail || errorData.message || "Unknown error"}`);
       }
 
       const data = await res.json();
